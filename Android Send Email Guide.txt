@@ -1,0 +1,356 @@
+
+
+
+1)
+
+Download activation.jar , mail.jar, additional.jar files and add to your app's libs folder.
+   
+
+   
+
+------------------------------------------------------------------------------------------------------------
+
+2)
+
+Add the following permission in menifest file:
+
+	<uses-permission android:name="android.permission.INTERNET" />
+	
+
+------------------------------------------------------------------------------------------------------------
+
+
+3) Create a ByteArrayDataSource.java class and add the code below:
+    
+    import java.io.ByteArrayInputStream;
+    import java.io.IOException;
+    import java.io.InputStream;
+    import java.io.OutputStream;
+
+    import javax.activation.DataSource;
+
+    public class ByteArrayDataSource implements DataSource {
+        private byte[] data;
+        private String type;
+
+        public ByteArrayDataSource(byte[] data, String type) {
+            super();
+            this.data = data;
+            this.type = type;
+        }
+
+
+        public ByteArrayDataSource(byte[] data) {
+            super();
+            this.data = data;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+        @Override
+        public InputStream getInputStream() throws IOException {
+            return new ByteArrayInputStream(data);
+        }
+
+        @Override
+        public OutputStream getOutputStream() throws IOException {
+            throw new IOException("Not Supported");
+        }
+
+        @Override
+        public String getContentType() {
+            if (type == null)
+                return "application/octet-stream";
+            else
+                return type;
+        }
+
+        @Override
+        public String getName() {
+            return "ByteArrayDataSource";
+        }
+    }
+
+
+-------------------------------------------------------------------------------------------------------
+
+
+
+4) Create JSSEProvider.java class and the code below:
+
+    package com.students.ameer.sendemail;
+    
+    import java.security.AccessController;
+    import java.security.Provider;
+    
+    public class JSSEProvider extends Provider {
+        public JSSEProvider() {
+            super("HarmonyJSSE", 1.0, "Harmony JSSE Provider");
+            AccessController.doPrivileged(new java.security.PrivilegedAction<Void>() {
+                public Void run() {
+                    put("SSLContext.TLS", "org.apache.harmony.xnet.provider.jsse.SSLContextImpl");
+                    put("Alg.Alias.SSLContext.TLSv1", "TLS");
+                    put("KeyManagerFactory.X509", "org.apache.harmony.xnet.provider.jsse.KeyManagerFactoryImpl");
+                    put("TrustManagerFactory.X509", "org.apache.harmony.xnet.provider.jsse.TrustManagerFactoryImpl");
+                    return null;
+                }
+            });
+        }
+    }
+
+
+
+--------------------------------------------------------------------------------------------------------
+
+
+5) Create GMailSender.java class and add the code below:
+
+    import java.security.Security;
+    import java.util.Properties;
+    
+    import javax.activation.DataHandler;
+    import javax.mail.Message;
+    import javax.mail.PasswordAuthentication;
+    import javax.mail.Session;
+    import javax.mail.Transport;
+    import javax.mail.internet.InternetAddress;
+    import javax.mail.internet.MimeMessage;
+    
+    public class GMailSender extends javax.mail.Authenticator {
+        private String mailhost = "smtp.gmail.com";
+        private String user;
+        private String password;
+        private Session session;
+    
+        static {
+            Security.addProvider(new JSSEProvider());
+        }
+    
+        public GMailSender(String user, String password) {
+            this.user = user;
+            this.password = password;
+    
+            Properties props = new Properties();
+            props.setProperty("mail.transport.protocol", "smtp");
+            props.setProperty("mail.host", mailhost);
+            props.put("mail.smtp.auth", "true");
+            props.put("mail.smtp.port", "465");
+            props.put("mail.smtp.socketFactory.port", "465");
+            props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+            props.put("mail.smtp.socketFactory.fallback", "false");
+            props.setProperty("mail.smtp.quitwait", "false");
+    
+            session = Session.getDefaultInstance(props, this);
+        }
+    
+        protected PasswordAuthentication getPasswordAuthentication() {
+            return new PasswordAuthentication(user, password);
+        }
+    
+        public synchronized void sendMail(String subject, String body,
+                                          String sender, String recipients) throws Exception {
+            MimeMessage message = new MimeMessage(session);
+            DataHandler handler = new DataHandler(new ByteArrayDataSource(body.getBytes(), "text/html"));
+            message.setSender(new InternetAddress(sender));
+            message.setSubject(subject);
+            message.setDataHandler(handler);
+    
+            if (recipients.indexOf(',') > 0)
+                message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(recipients));
+            else
+                message.setRecipient(Message.RecipientType.TO, new InternetAddress(recipients));
+    
+            Transport.send(message);
+        }
+    }
+
+
+
+------------------------------------------------------------------------------------------------------
+
+
+6)  Update You activity_main.xml file with:
+
+    <?xml version="1.0" encoding="utf-8"?>
+    <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="20dp"
+        tools:context=".MainActivity">
+    
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Send Your Email"
+            android:gravity="center"
+            android:textSize="26dp"
+            android:textStyle="bold"
+            android:layout_marginTop="30dp"
+            android:inputType="textEmailAddress"
+            >
+        </TextView>
+    
+        <EditText
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Your Gmail Address"
+            android:id="@+id/myEmail"
+            android:layout_marginTop="20dp"
+            android:inputType="textEmailAddress"
+            >
+        </EditText>
+        <EditText
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Your Gmail Password"
+            android:id="@+id/myPassword"
+            android:layout_marginTop="10dp"
+            android:inputType="textPassword"
+            >
+        </EditText>
+    
+        <EditText
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Receiver's Email Address"
+            android:id="@+id/receiverEmail"
+            android:layout_marginTop="10dp"
+            android:inputType="textEmailAddress"
+            >
+        </EditText>
+        <EditText
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Email Title"
+            android:id="@+id/title"
+            android:layout_marginTop="30dp"
+            android:inputType="textEmailAddress"
+            >
+        </EditText>
+    
+        <EditText
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Message"
+            android:id="@+id/message"
+            android:layout_marginTop="10dp"
+            android:inputType="textMultiLine"
+            >
+        </EditText>
+    
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Send Email"
+            android:layout_gravity="right"
+            android:id="@+id/SendEmail"
+            android:layout_marginTop="10dp"
+            android:padding="20dp"
+            ></Button>
+    
+    </LinearLayout>
+
+
+
+------------------------------------------------------------------------------------------------------
+
+
+7)  Update Your MainActivity.java file with
+
+
+    import androidx.appcompat.app.AppCompatActivity;
+    
+    import android.os.Bundle;
+    import android.util.Log;
+    import android.view.View;
+    import android.widget.Button;
+    import android.widget.EditText;
+    import android.widget.Toast;
+    
+    public class MainActivity extends AppCompatActivity {
+    
+    
+        EditText myEmail;
+        EditText myPassword;
+        EditText receiverEmail;
+        EditText Title;
+        EditText Message;
+        Button BtnSendEmail;
+        @Override
+        protected void onCreate(Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            setContentView(R.layout.activity_main);
+            myEmail=(EditText)findViewById(R.id.myEmail);
+            myPassword=(EditText)findViewById(R.id.myPassword);
+            receiverEmail=(EditText)findViewById(R.id.receiverEmail);
+            Title=(EditText)findViewById(R.id.title);
+            Message=(EditText)findViewById(R.id.message);
+            BtnSendEmail=(Button) findViewById(R.id.SendEmail);
+    
+            BtnSendEmail.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    String sender=myEmail.getText().toString();
+                    String senderPass=myPassword.getText().toString();
+                    String receiver=receiverEmail.getText().toString();
+                    String title=Title.getText().toString();
+                    String message=Message.getText().toString();
+    
+                    sendEmail(sender,senderPass,receiver,title,message);
+                }
+            });
+    
+        }
+    
+        private void sendEmail(final String Sender,final String Password,final String Receiver,final String Title,final String Message)
+        {
+    
+            new Thread(new Runnable() {
+    
+                @Override
+                public void run() {
+                    try {
+                        GMailSender sender = new GMailSender(Sender,Password);
+                        sender.sendMail(Title, "<b>"+Message+"</b>", Sender, Receiver);
+                        makeAlert();
+    
+                    } catch (Exception e) {
+                        Log.e("SendMail", e.getMessage(), e);
+                    }
+                }
+    
+            }).start();
+        }
+        private void makeAlert(){
+            this.runOnUiThread(new Runnable() {
+                public void run() {
+                    Toast.makeText(MainActivity.this, "Mail Sent", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+    }
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+8) Enable Less Secure Apps Permission of Your Email Address Which you use to send emails:
+
+	follow the link: https://myaccount.google.com/u/2/lesssecureapps
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+9) Test Your App and Enjoy!
+
+
+
